@@ -30,8 +30,8 @@ export async function parseBody<T>(req: Request, schema: ZodSchema<T>): Promise<
 }
 
 export function handle<C = unknown>(handler: (req: Request, ctx: C) => Promise<Response>) {
-  return async (req: Request, ctx: C) => {
-    try { return await handler(req, ctx); }
+  return async (req: Request, ctx?: C) => {
+    try { return await handler(req, ctx as C); }
     catch (e) {
       if (e instanceof ResponseError) return fail(e.status, e.msg);
       const msg = (e as Error).message ?? 'Internal error';
