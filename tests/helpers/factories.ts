@@ -16,7 +16,7 @@ export async function makeFolder(ownerId: string, parentFolderId: string | null 
 
 export async function makePage(ownerId: string, folderId: string | null = null, title = 'Page') {
   return getPrisma().page.create({
-    data: { ownerId, folderId, title, currentSceneJson: { elements: [], appState: {}, files: {} } },
+    data: { ownerId, folderId, title, publicSlug: uniq('slug'), currentSceneJson: { elements: [], appState: {}, files: {} } },
   });
 }
 
