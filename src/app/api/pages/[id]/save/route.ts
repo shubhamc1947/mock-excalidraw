@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { handle, ok, parseBody, requireUserId } from '@/lib/api-helpers';
+import { handle, ok, parseBody, requireUserId, fail } from '@/lib/api-helpers';
 import { assertPagePermission } from '@/lib/permissions';
 import { saveSceneAndSnapshot } from '@/lib/snapshots';
 
@@ -15,6 +15,14 @@ export const POST = handle<Ctx>(async (req, { params }) => {
   const { id } = await params;
   const userId = await requireUserId();
   await assertPagePermission(db, id, userId, 'canEdit');
+  const page = await db.page.findUnique({
+    where: { id },
+    select: { editingUserId: true, editingExpiresAt: true },
+  });
+  const heldByMe = page?.editingUserId === userId
+    && page?.editingExpiresAt
+    && page.editingExpiresAt.getTime() > Date.now();
+  if (!heldByMe) return fail(409, 'You do not hold the edit lock');
   const { sceneJson, thumbnailDataUrl } = await parseBody(req, Save);
   await saveSceneAndSnapshot(db, id, userId, sceneJson, thumbnailDataUrl ?? undefined);
   return ok({ savedAt: new Date().toISOString() });
