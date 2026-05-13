@@ -1,16 +1,22 @@
 import NextAuth from 'next-auth';
-import Google from 'next-auth/providers/google';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { db } from '@/lib/db';
 import { backLinkInvitesForUser } from '@/lib/invites';
+import authConfig from '@/auth.config';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter: PrismaAdapter(db),
-  providers: [Google],
-  session: { strategy: 'database' },
+  session: { strategy: 'jwt' },
   callbacks: {
-    async session({ session, user }) {
-      if (session.user) (session.user as { id?: string }).id = user.id;
+    async jwt({ token, user }) {
+      if (user) token.id = user.id;
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user && token.id) {
+        (session.user as { id?: string }).id = token.id as string;
+      }
       return session;
     },
   },
@@ -19,7 +25,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user.id && user.email) {
         try {
           const linkedPageIds = await backLinkInvitesForUser(db, user.id, user.email);
-          // For each newly-linked page, fire an INVITED notification.
           for (const pageId of linkedPageIds) {
             const collab = await db.collaborator.findFirst({
               where: { pageId, userId: user.id },
