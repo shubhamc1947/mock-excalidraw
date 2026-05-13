@@ -53,3 +53,94 @@ model VerificationToken {
   expires    DateTime
   @@unique([identifier, token])
 }
+
+enum CollabRole {
+  AUTHOR
+  VIEWER
+}
+
+enum NotifType {
+  COMMENT
+  INVITED
+}
+
+model Folder {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  ownerId        String    @db.ObjectId
+  parentFolderId String?   @db.ObjectId
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  @@index([ownerId, parentFolderId])
+  @@index([ownerId, deletedAt])
+}
+
+model Page {
+  id               String    @id @default(auto()) @map("_id") @db.ObjectId
+  title            String
+  ownerId          String    @db.ObjectId
+  folderId         String?   @db.ObjectId
+  currentSceneJson Json
+  thumbnailDataUrl String?
+  isPublic         Boolean   @default(false)
+  publicSlug       String?   @unique
+  editingUserId    String?   @db.ObjectId
+  editingExpiresAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  deletedAt        DateTime?
+
+  @@index([ownerId, folderId, deletedAt])
+  @@index([title])
+}
+
+model DrawingSnapshot {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  pageId          String   @db.ObjectId
+  sceneJson       Json
+  createdByUserId String   @db.ObjectId
+  createdAt       DateTime @default(now())
+
+  @@index([pageId, createdAt])
+}
+
+model Collaborator {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  pageId          String     @db.ObjectId
+  email           String
+  userId          String?    @db.ObjectId
+  role            CollabRole
+  invitedByUserId String     @db.ObjectId
+  invitedAt       DateTime   @default(now())
+
+  @@unique([pageId, email])
+  @@index([userId])
+  @@index([email])
+}
+
+model Comment {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  pageId    String    @db.ObjectId
+  userId    String    @db.ObjectId
+  body      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
+
+  @@index([pageId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id              String    @id @default(auto()) @map("_id") @db.ObjectId
+  recipientUserId String    @db.ObjectId
+  type            NotifType
+  actorUserId     String    @db.ObjectId
+  pageId          String?   @db.ObjectId
+  commentId       String?   @db.ObjectId
+  readAt          DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@index([recipientUserId, readAt, createdAt])
+}
