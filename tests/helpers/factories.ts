@@ -1,4 +1,5 @@
 import { getPrisma } from './db';
+import { newPublicSlug } from '@/lib/ids';
 import type { CollabRole } from '@prisma/client';
 
 let counter = 0;
@@ -16,7 +17,7 @@ export async function makeFolder(ownerId: string, parentFolderId: string | null 
 
 export async function makePage(ownerId: string, folderId: string | null = null, title = 'Page') {
   return getPrisma().page.create({
-    data: { ownerId, folderId, title, publicSlug: uniq('slug'), currentSceneJson: { elements: [], appState: {}, files: {} } },
+    data: { ownerId, folderId, title, publicSlug: newPublicSlug(), currentSceneJson: { elements: [], appState: {}, files: {} } },
   });
 }
 
