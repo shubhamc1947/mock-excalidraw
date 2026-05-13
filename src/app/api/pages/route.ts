@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { handle, ok, parseBody, requireUserId } from '@/lib/api-helpers';
 import { assertFolderOwner } from '@/lib/folders';
+import { newPublicSlug } from '@/lib/ids';
 
 const Create = z.object({
   title: z.string().min(1).max(120).default('Untitled'),
@@ -18,6 +19,7 @@ export const POST = handle(async (req) => {
       folderId,
       ownerId: userId,
       currentSceneJson: { elements: [], appState: {}, files: {} },
+      publicSlug: newPublicSlug(),
     },
   });
   return ok(page);
