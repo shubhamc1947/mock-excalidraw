@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   cascadeSoftDeleteFolder, purgeExpiredTrash, TRASH_TTL_MS,
-  restoreFolder, restorePage,
+  restoreFolder, restorePage, hardDeletePage, hardDeleteFolder,
 } from '@/lib/trash';
 import { getPrisma } from '../helpers/db';
 import { makeUser, makeFolder, makePage } from '../helpers/factories';
@@ -78,5 +78,53 @@ describe('trash', () => {
     expect(await getPrisma().collaborator.count()).toBe(0);
     expect(await getPrisma().comment.count()).toBe(0);
     expect(await getPrisma().notification.count({ where: { pageId: oldPage.id } })).toBe(0);
+  });
+
+  it('restoreFolder undoes the cascade (folder + descendants + their pages)', async () => {
+    const me = await makeUser();
+    const root = await makeFolder(me.id);
+    const child = await makeFolder(me.id, root.id);
+    const grand = await makeFolder(me.id, child.id);
+    const pRoot = await makePage(me.id, root.id);
+    const pGrand = await makePage(me.id, grand.id);
+    await cascadeSoftDeleteFolder(getPrisma(), root.id);
+    // Confirm everything trashed
+    expect((await getPrisma().folder.findUnique({ where: { id: child.id } }))?.deletedAt).not.toBeNull();
+    expect((await getPrisma().page.findUnique({ where: { id: pGrand.id } }))?.deletedAt).not.toBeNull();
+    // Restore
+    await restoreFolder(getPrisma(), root.id);
+    for (const f of [root.id, child.id, grand.id]) {
+      expect((await getPrisma().folder.findUnique({ where: { id: f } }))?.deletedAt).toBeNull();
+    }
+    for (const p of [pRoot.id, pGrand.id]) {
+      expect((await getPrisma().page.findUnique({ where: { id: p } }))?.deletedAt).toBeNull();
+    }
+  });
+
+  it('hardDeletePage removes page + snapshots + collabs + comments + notifications', async () => {
+    const me = await makeUser();
+    const friend = await makeUser();
+    const p = await makePage(me.id);
+    await getPrisma().drawingSnapshot.create({ data: { pageId: p.id, sceneJson: {}, createdByUserId: me.id } });
+    await getPrisma().collaborator.create({ data: { pageId: p.id, email: friend.email, userId: friend.id, role: 'AUTHOR', invitedByUserId: me.id } });
+    await getPrisma().comment.create({ data: { pageId: p.id, userId: me.id, body: 'x' } });
+    await getPrisma().notification.create({ data: { recipientUserId: me.id, type: 'COMMENT', actorUserId: friend.id, pageId: p.id } });
+    await hardDeletePage(getPrisma(), p.id);
+    expect(await getPrisma().page.count({ where: { id: p.id } })).toBe(0);
+    expect(await getPrisma().drawingSnapshot.count()).toBe(0);
+    expect(await getPrisma().collaborator.count()).toBe(0);
+    expect(await getPrisma().comment.count()).toBe(0);
+    expect(await getPrisma().notification.count({ where: { pageId: p.id } })).toBe(0);
+  });
+
+  it('hardDeleteFolder recursively deletes nested folders + pages', async () => {
+    const me = await makeUser();
+    const root = await makeFolder(me.id);
+    const child = await makeFolder(me.id, root.id);
+    await makePage(me.id, root.id);
+    await makePage(me.id, child.id);
+    await hardDeleteFolder(getPrisma(), root.id);
+    expect(await getPrisma().folder.count()).toBe(0);
+    expect(await getPrisma().page.count()).toBe(0);
   });
 });
