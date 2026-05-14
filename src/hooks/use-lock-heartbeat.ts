@@ -13,26 +13,55 @@ export function useLockHeartbeat(pageId: string, enabled: boolean): LockState {
   useEffect(() => {
     if (!enabled) { setState(null); return; }
     let alive = true;
+    let heartbeatId: ReturnType<typeof setInterval> | null = null;
+    let pollId: ReturnType<typeof setInterval> | null = null;
 
-    async function call(action: 'acquire' | 'heartbeat') {
-      try {
-        const r = await fetch(`/api/pages/${pageId}/lock/${action}`, { method: 'POST' });
-        const j = await r.json();
-        if (alive) setState(j);
-      } catch {}
+    function clearTimers() {
+      if (heartbeatId) { clearInterval(heartbeatId); heartbeatId = null; }
+      if (pollId) { clearInterval(pollId); pollId = null; }
     }
 
-    call('acquire');
-    const heartbeatId = setInterval(() => call('heartbeat'), 60_000);
-
-    // Poll every 10s when we don't hold the lock, to detect when it frees
-    const pollId = setInterval(async () => {
+    async function acquire() {
       try {
         const r = await fetch(`/api/pages/${pageId}/lock/acquire`, { method: 'POST' });
         const j = await r.json();
-        if (alive) setState(j);
+        if (!alive) return j;
+        setState(j);
+        applyTimerState(j.granted);
+        return j;
+      } catch { return null; }
+    }
+    async function beat() {
+      try {
+        const r = await fetch(`/api/pages/${pageId}/lock/heartbeat`, { method: 'POST' });
+        const j = await r.json();
+        if (!alive) return;
+        setState(j);
+        applyTimerState(j.granted);
       } catch {}
-    }, 10_000);
+    }
+    async function readState() {
+      try {
+        const r = await fetch(`/api/pages/${pageId}/lock`);
+        if (!r.ok) return;
+        const j = await r.json();
+        if (!alive) return;
+        setState(j);
+        // If the lock just freed up, surface that — but DO NOT auto-acquire.
+        // The user must click "Take over" to claim.
+      } catch {}
+    }
+
+    function applyTimerState(holding: boolean) {
+      clearTimers();
+      if (holding) {
+        heartbeatId = setInterval(beat, 60_000);
+      } else {
+        pollId = setInterval(readState, 10_000);
+      }
+    }
+
+    acquire();
 
     const onUnload = () => {
       try { navigator.sendBeacon?.(`/api/pages/${pageId}/lock/release`, new Blob()); } catch {}
@@ -41,8 +70,7 @@ export function useLockHeartbeat(pageId: string, enabled: boolean): LockState {
 
     return () => {
       alive = false;
-      clearInterval(heartbeatId);
-      clearInterval(pollId);
+      clearTimers();
       window.removeEventListener('beforeunload', onUnload);
       onUnload();
     };

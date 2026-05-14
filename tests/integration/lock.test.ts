@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 import { POST as ACQUIRE } from '@/app/api/pages/[id]/lock/acquire/route';
 import { POST as HEARTBEAT } from '@/app/api/pages/[id]/lock/heartbeat/route';
 import { POST as RELEASE } from '@/app/api/pages/[id]/lock/release/route';
+import { GET as LOCK_STATE } from '@/app/api/pages/[id]/lock/route';
 
 const u = (id: string | null) => (auth as any).mockResolvedValue(id ? { user: { id } } : null);
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
@@ -70,5 +71,22 @@ describe('lock endpoints', () => {
     u(b.id);
     const res = await ACQUIRE(new Request('http://x', { method: 'POST' }), ctx(p.id));
     expect(res.status).toBe(200);
+  });
+
+  it('GET /lock returns read-only state without claiming', async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const p = await makePage(a.id);
+    await makeCollab(p.id, b.id, b.email, 'AUTHOR', a.id);
+    u(a.id);
+    await ACQUIRE(new Request('http://x', { method: 'POST' }), ctx(p.id));
+    u(b.id);
+    const res = await LOCK_STATE(new Request('http://x'), ctx(p.id));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.holderUserId).toBe(a.id);
+    // Verify state didn't change (b didn't steal)
+    const after = await getPrisma().page.findUnique({ where: { id: p.id } });
+    expect(after?.editingUserId).toBe(a.id);
   });
 });
