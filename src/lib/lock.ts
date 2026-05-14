@@ -24,16 +24,29 @@ export async function acquireLock(
   pageId: string,
   userId: string,
 ): Promise<LockResult> {
-  const state = await getLockState(db, pageId);
-  if (state.holderUserId && state.holderUserId !== userId) {
-    return { granted: false, holderUserId: state.holderUserId, expiresAt: state.expiresAt };
-  }
+  const now = new Date();
   const expiresAt = new Date(Date.now() + LOCK_TTL_MS);
-  await db.page.update({
-    where: { id: pageId },
+
+  // Atomic claim: only update if free, expired, or already mine.
+  const result = await db.page.updateMany({
+    where: {
+      id: pageId,
+      OR: [
+        { editingUserId: { isSet: false } },
+        { editingUserId: userId },
+        { editingExpiresAt: { lt: now } },
+      ],
+    },
     data: { editingUserId: userId, editingExpiresAt: expiresAt },
   });
-  return { granted: true, holderUserId: userId, expiresAt };
+
+  if (result.count === 1) {
+    return { granted: true, holderUserId: userId, expiresAt };
+  }
+
+  // Lock contended — read state to return holder info.
+  const state = await getLockState(db, pageId);
+  return { granted: false, holderUserId: state.holderUserId, expiresAt: state.expiresAt };
 }
 
 export async function heartbeat(

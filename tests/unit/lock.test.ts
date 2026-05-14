@@ -101,4 +101,19 @@ describe('lock state machine', () => {
   it('LOCK_TTL_MS is at least 5 minutes', () => {
     expect(LOCK_TTL_MS).toBeGreaterThanOrEqual(5 * 60 * 1000);
   });
+
+  it('concurrent acquires only succeed once', async () => {
+    const a = await makeUser();
+    const b = await makeUser();
+    const p = await makePage(a.id);
+    const [r1, r2] = await Promise.all([
+      acquireLock(getPrisma(), p.id, a.id),
+      acquireLock(getPrisma(), p.id, b.id),
+    ]);
+    const granted = [r1, r2].filter(r => r.granted);
+    expect(granted).toHaveLength(1);
+    // The other reports the same holder
+    const denied = [r1, r2].find(r => !r.granted)!;
+    expect(denied.holderUserId).toBe(granted[0].holderUserId);
+  });
 });
