@@ -25,8 +25,10 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · shadcn/ui (o
 3. Push schema to your database (Mongo doesn't use migrations):
 
    ```bash
-   npx prisma db push
+   npm run db:push
    ```
+
+   > The `db:*` scripts wrap Prisma with `dotenv-cli` so it picks up `.env.local`. The bare `npx prisma db push` will fail because Prisma's CLI only reads `.env` by default.
 
 4. Run dev server:
 
@@ -45,8 +47,9 @@ Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · shadcn/ui (o
 | `npm start` | Run the production build |
 | `npm test` | Run the Vitest suite (uses mongodb-memory-server, ~4 min) |
 | `npm run test:watch` | Watch mode |
-| `npx prisma db push` | Sync Prisma schema to MongoDB |
-| `npx prisma studio` | Browse the database in a UI |
+| `npm run db:push` | Sync Prisma schema to MongoDB (loads `.env.local`) |
+| `npm run db:generate` | Regenerate Prisma client |
+| `npm run db:studio` | Browse the database in a UI |
 
 ## Tests
 
