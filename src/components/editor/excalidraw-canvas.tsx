@@ -1,6 +1,6 @@
 'use client';
 import dynamic from 'next/dynamic';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTheme } from 'next-themes';
 import { useAutosave } from '@/hooks/use-autosave';
 
@@ -28,24 +28,48 @@ type Props = {
   onSaveStatusChange?: (status: 'idle' | 'saving' | 'saved' | 'error') => void;
 };
 
+/**
+ * Strip non-serialisable / runtime-only fields from Excalidraw's appState before:
+ * (a) feeding a JSON-roundtripped scene back to the editor (Excalidraw expects
+ *     `collaborators` as a Map — Mongo gives us `{}`), and
+ * (b) saving the scene back to the server (no point persisting transient runtime state).
+ */
+function sanitiseScene(scene: Scene): Scene {
+  if (!scene) return { elements: [], appState: {}, files: {} };
+  const appState = { ...(scene.appState ?? {}) };
+  // collaborators must be a Map at runtime; remove the rehydrated plain object
+  // so Excalidraw initialises a fresh empty Map.
+  delete (appState as { collaborators?: unknown }).collaborators;
+  // collaboration-related transient fields
+  delete (appState as { selectedElementIds?: unknown }).selectedElementIds;
+  return {
+    elements: Array.isArray(scene.elements) ? scene.elements : [],
+    appState,
+    files: scene.files ?? {},
+  };
+}
+
 export function ExcalidrawCanvas({ pageId, initialScene, readOnly, onSaveStatusChange }: Props) {
   const { resolvedTheme } = useTheme();
   const theme = resolvedTheme === 'dark' ? 'dark' : 'light';
-  const [scene, setScene] = useState<Scene>(initialScene);
+
+  const cleanInitial = useMemo(() => sanitiseScene(initialScene), [initialScene]);
+  const [scene, setScene] = useState<Scene>(cleanInitial);
 
   const save = useCallback(async (s: Scene) => {
     if (readOnly) return;
     const res = await fetch(`/api/pages/${pageId}/save`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sceneJson: s }),
+      body: JSON.stringify({ sceneJson: sanitiseScene(s) }),
     });
     if (!res.ok) throw new Error('save failed');
   }, [pageId, readOnly]);
 
   const status = useAutosave(scene, save, 2000, !readOnly);
-  // Surface status to parent
-  useMemo(() => { onSaveStatusChange?.(status); return status; }, [status, onSaveStatusChange]);
+
+  // Surface status to parent (was incorrectly inside useMemo)
+  useEffect(() => { onSaveStatusChange?.(status); }, [status, onSaveStatusChange]);
 
   const onChange = useCallback((elements: any, appState: any, files: any) => {
     setScene({ elements: Array.from(elements), appState, files });
@@ -54,7 +78,7 @@ export function ExcalidrawCanvas({ pageId, initialScene, readOnly, onSaveStatusC
   return (
     <Excalidraw
       key={`${pageId}-${theme}`}
-      initialData={initialScene as any}
+      initialData={cleanInitial as any}
       onChange={onChange}
       viewModeEnabled={readOnly}
       theme={theme}
