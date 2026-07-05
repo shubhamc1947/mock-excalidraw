@@ -1,5 +1,7 @@
 # Mock Excalidraw
 
+**Live demo:** [mock-excalidraw.vercel.app](https://mock-excalidraw.vercel.app) · [Design decisions](docs/DECISIONS.md)
+
 A focused, opinionated app for drawing and sharing diagrams — Google sign-in, nested folders, public links, per-page collaborators with turn-based editing, comments with rate limiting, in-app notifications, version history, soft-delete with auto-purge.
 
 ## Stack
